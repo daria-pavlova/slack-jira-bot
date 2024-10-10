@@ -1,2 +1,4 @@
-myenv
-.env
+**secret**
+**env**
+**.env**
+.DS_Store

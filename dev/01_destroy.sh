@@ -13,11 +13,10 @@ this="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -z ${CI+x} ]; then 
     # shellcheck disable=SC1091
-    . "$this/../../roc-scripts/common.sh"
+    . "$this/../common-scripts/common.sh"
 
     # Login to the right ROC clusters and namespaces
-    roc_login
     export -f prompt
 fi
 
-"$this/../../deploy_helper.sh" destroy_all
+"$this/../deploy_helper.sh" destroy_all
