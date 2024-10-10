@@ -36,7 +36,10 @@ ticket_counter = 1
 ALLOWED_CHANNELS = os.environ.get("ALLOWED_CHANNELS", "").split(",")
 logger.debug(f"Allowed channels: {ALLOWED_CHANNELS}")
 
-def get_full_message_and_link(channel_id, message_ts):
+# Jira server URL for ticket links
+JIRA_SERVER = os.environ["JIRA_SERVER"]
+
+def get_full_message(channel_id, message_ts):
     try:
         result = client.conversations_history(
             channel=channel_id,
@@ -46,11 +49,15 @@ def get_full_message_and_link(channel_id, message_ts):
         )
         if result["ok"] and len(result["messages"]) > 0:
             message = result["messages"][0]
+            message_text = message.get("text", "")
+            
+            # Get permalink
             permalink = client.chat_getPermalink(
                 channel=channel_id,
                 message_ts=message_ts
             )["permalink"]
-            return message["text"], permalink
+            
+            return message_text, permalink
         else:
             logger.error("Failed to fetch message details")
             return None, None
@@ -76,20 +83,20 @@ def handle_reaction(event, say):
         message_ts = event["item"]["ts"]
         
         try:
-            full_message, message_link = get_full_message_and_link(channel_id, message_ts)
-            if full_message is None or message_link is None:
-                logger.error("Failed to get full message content or link")
+            message_text, permalink = get_full_message(channel_id, message_ts)
+            if message_text is None or permalink is None:
+                logger.error("Failed to get full message content or permalink")
                 say("Sorry, I couldn't create a Jira ticket due to an error fetching the message content.")
                 return
 
-            logger.info(f"Full message content: {full_message}")
-            logger.info(f"Message link: {message_link}")
+            logger.info(f"Full message content: {message_text}")
+            logger.info(f"Message permalink: {permalink}")
             
-            # Create Jira ticket with both message content and link
+            # Create Jira ticket
             issue_dict = {
                 'project': {'key': os.environ["JIRA_PROJECT_KEY"]},
                 'summary': f'CDE-HELP-{ticket_counter}',
-                'description': f"{full_message}\n\nOriginal Slack message: {message_link}",
+                'description': f"Slack message: {permalink}\n\nFull message content:\n{message_text}",
                 'issuetype': {'name': 'Task'},
             }
             
@@ -99,8 +106,9 @@ def handle_reaction(event, say):
             # Increment the ticket counter
             ticket_counter += 1
             
-            # Notify in the Slack channel
-            say(f"Jira ticket created: {new_issue.key}")
+            # Notify in the Slack channel with Jira ticket link
+            jira_ticket_link = f"{JIRA_SERVER}/browse/{new_issue.key}"
+            say(f"Jira ticket created: <{jira_ticket_link}|{new_issue.key}>")
         except Exception as e:
             logger.error(f"Error processing reaction: {e}")
             say("Sorry, an error occurred while creating the Jira ticket.")
