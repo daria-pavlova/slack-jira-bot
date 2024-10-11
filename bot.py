@@ -65,12 +65,25 @@ def get_full_message(channel_id, message_ts):
         logger.error(f"Error fetching message details: {e}")
         return None, None
 
-@app.event("reaction_added")
-def handle_reaction(event, say):
+def post_message_in_thread(channel_id, thread_ts, text):
+    try:
+        response = client.chat_postMessage(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            text=text
+        )
+        logger.debug(f"Message posted in thread: {response}")
+        return response
+    except Exception as e:
+        logger.error(f"Error posting message in thread: {e}")
+        return None
+
+def handle_reaction(body, event, logger):
     global ticket_counter
     logger.debug(f"Reaction event received: {event}")
     
     channel_id = event["item"]["channel"]
+    message_ts = event["item"]["ts"]
     
     # Check if the event occurred in an allowed channel
     if ALLOWED_CHANNELS and channel_id not in ALLOWED_CHANNELS:
@@ -79,14 +92,16 @@ def handle_reaction(event, say):
     
     if event["reaction"] == "jira":
         logger.info("Jira reaction detected, processing...")
-        # Get the message that was reacted to
-        message_ts = event["item"]["ts"]
         
         try:
             message_text, permalink = get_full_message(channel_id, message_ts)
             if message_text is None or permalink is None:
                 logger.error("Failed to get full message content or permalink")
-                say("Sorry, I couldn't create a Jira ticket due to an error fetching the message content.")
+                post_message_in_thread(
+                    channel_id,
+                    message_ts,
+                    "Sorry, I couldn't create a Jira ticket due to an error fetching the message content."
+                )
                 return
 
             logger.info(f"Full message content: {message_text}")
@@ -106,18 +121,29 @@ def handle_reaction(event, say):
             # Increment the ticket counter
             ticket_counter += 1
             
-            # Notify in the Slack channel with Jira ticket link
+            # Notify in the Slack thread with Jira ticket link
             jira_ticket_link = f"{JIRA_SERVER}/browse/{new_issue.key}"
-            say(f"Jira ticket created: <{jira_ticket_link}|{new_issue.key}>")
+            post_message_in_thread(
+                channel_id,
+                message_ts,
+                f"Jira ticket created: <{jira_ticket_link}|{new_issue.key}>"
+            )
         except Exception as e:
             logger.error(f"Error processing reaction: {e}")
-            say("Sorry, an error occurred while creating the Jira ticket.")
+            post_message_in_thread(
+                channel_id,
+                message_ts,
+                "Sorry, an error occurred while creating the Jira ticket."
+            )
     else:
         logger.debug(f"Non-jira reaction: {event['reaction']}")
 
-@app.event("message")
-def handle_message(message, say):
+def handle_message(message, logger):
     logger.debug(f"Message event received: {message}")
+
+# Register the handlers
+app.event("reaction_added")(handle_reaction)
+app.event("message")(handle_message)
 
 if __name__ == "__main__":
     logger.info("Starting the Slack bot...")
