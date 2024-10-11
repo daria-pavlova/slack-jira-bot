@@ -1,0 +1,24 @@
+
+---
+# slack-jira-bot-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-jira-bot-${ENV}
+  namespace: slack-jira-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slack-jira-bot
+  template:
+    metadata:
+      labels:
+        app: slack-jira-bot
+    spec:
+      containers:
+      - name: slack-jira-bot
+        image: ${DOCKER_IMAGE}
+        envFrom:
+        - secretRef:
+            name: slack-jira-bot-secret
